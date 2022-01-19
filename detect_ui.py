@@ -1,9 +1,8 @@
 from PyQt5 import QtCore, QtGui
-from PyQt5.QtCore import pyqtSignal, QThread, QTimer
-from PyQt5.QtGui import QImage, QPixmap,QPainter
+from PyQt5.QtCore import pyqtSignal, QThread
+from PyQt5.QtGui import QImage, QPixmap
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QPlainTextEdit, QLineEdit, QPushButton, QFileDialog
-import argparse
 import os
 import sys
 from pathlib import Path
@@ -23,8 +22,8 @@ ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 from models.common import DetectMultiBackend
 from utils.datasets import IMG_FORMATS, VID_FORMATS, LoadImages, LoadStreams
 from utils.general import (LOGGER, check_file, check_img_size, check_imshow, check_requirements, colorstr,
-                           increment_path, non_max_suppression, print_args, scale_coords, strip_optimizer, xyxy2xywh)
-from utils.plots import Annotator, colors, save_one_box
+                           non_max_suppression, scale_coords, strip_optimizer, xyxy2xywh)
+from utils.plots import Annotator, colors
 from utils.torch_utils import select_device, time_sync
 
 # find the items by label name from detected object list
@@ -420,7 +419,7 @@ class MyWindow(QMainWindow):
     def connect_signal_slots(self):
         
         self.det_thread = DetThread()
-        self.det_thread.source = "demo2.MOV"
+        self.det_thread.source = '0'
         self.det_thread.send_img.connect(lambda x: self.show_image(x, self.webcam))
         self.det_thread.send_log.connect(lambda x: self.show_log(x, self.terminal))
         self.btn_save_path.clicked.connect(self.browse_savepath)
