@@ -1,6 +1,6 @@
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtCore import pyqtSignal, QThread
-from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtGui import QImage, QPixmap, QKeySequence
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QPlainTextEdit, QLineEdit, QPushButton, QFileDialog
 import os
@@ -12,6 +12,7 @@ import numpy as np
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
+from utils.augmentations import letterbox
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # YOLOv5 root directory
@@ -106,20 +107,45 @@ class DetThread(QThread):
             model.model.half() if half else model.model.float()
 
         # Dataloader
-        if webcam:
-            view_img = check_imshow()
-            cudnn.benchmark = True  # set True to speed up constant image size inference
-            dataset = LoadStreams(source, img_size=imgsz, stride=stride, auto=pt)
-            bs = len(dataset)  # batch_size
-        else:
-            dataset = LoadImages(source, img_size=imgsz, stride=stride, auto=pt)
-            bs = 1  # batch_size
+        cudnn.benchmark = True
+        bs = 1  # batch_size
         vid_path, vid_writer = [None] * bs, [None] * bs
-
+        
+        if source.isnumeric():
+            source = int(source)
+        self.vid_cap = cv2.VideoCapture(source)
+        
         # Run inference
+        
         model.warmup(imgsz=(1, 3, *imgsz), half=half)  # warmup
         dt, seen = [0.0, 0.0, 0.0], 0
-        for path, im, im0s, self.vid_cap, s in dataset:
+        
+        # for path, im, im0s, self.vid_cap, s in self.dataset:
+        mode = "video"
+        while(self.vid_cap.isOpened()):
+            
+            s = ''
+            # Capture the video frame
+            # by frame
+            ret, im0s = self.vid_cap.read()
+            im0s = [im0s]
+            path = str(source)
+        
+            im0 = im0s.copy()
+            img = [letterbox(x, imgsz, stride=stride, auto=pt and pt)[0] for x in im0]
+
+            # Stack
+            img = np.stack(img, 0)
+
+            # Convert
+            img = img[..., ::-1].transpose((0, 3, 1, 2))  # BGR to RGB, BHWC to BCHW
+            im = np.ascontiguousarray(img)
+            
+            im = im[0]
+            im0s = im0s[0]
+
+        
+        
             t1 = time_sync()
             im = torch.from_numpy(im).to(device)
             im = im.half() if half else im.float()  # uint8 to fp16/32
@@ -139,20 +165,19 @@ class DetThread(QThread):
             pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
             dt[2] += time_sync() - t3
             
-            
             # Process predictions
             for i, det in enumerate(pred):  # per image
                 seen += 1
                 if webcam:  # batch_size >= 1
-                    p, im0, frame = path[i], im0s[i].copy(), dataset.count
+                    p, im0, frame = path[i], im0s[i].copy(), 0
                     s += f'{i}: '
                 else:
-                    p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
+                    p, im0, frame = path, im0s.copy(), 0
 
                 p = Path(p)  # to Path
                 save_path = os.path.join(save_dir, p.name) # str(save_dir / p.name)  # im.jpg
-                txt_path =  os.path.join(save_dir, 'labels', p.stem) if dataset.mode == 'image' else f'_{frame}'
-                # txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # im.txt
+                txt_path =  os.path.join(save_dir, 'labels', p.stem) if mode == 'image' else f'_{frame}'
+                # txt_path = str(save_dir / 'labels' / p.stem) + ('' if self.dataset.mode == 'image' else f'_{frame}')  # im.txt
                 s += '%gx%g ' % im.shape[2:]  # print string
                 gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
                 imc = im0.copy() if save_crop else im0  # for save_crop
@@ -248,14 +273,14 @@ class DetThread(QThread):
                 cv2.putText(im0, pass_label, (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
                 # Stream results
                 im0 = annotator.result()
-                if view_img:
-                    cv2.imshow(str(p), im0)
-                    cv2.waitKey(1)  # 1 millisecond
+                # if view_img:
+                    # cv2.imshow(str(p), im0)
+                    # cv2.waitKey(1)  # 1 millisecond
 
                 
                 # Save results (image with detections)
                 if save_img:
-                    if dataset.mode == 'image':
+                    if mode == 'image':
                         cv2.imwrite(save_path, im0)
                     else:  # 'video' or 'stream'
                         if vid_path[i] != save_path:  # new video
@@ -419,14 +444,16 @@ class MyWindow(QMainWindow):
     def connect_signal_slots(self):
         
         self.det_thread = DetThread()
-        self.det_thread.source = '0'
+        self.det_thread.source = 'demo2.MOV'
         self.det_thread.send_img.connect(lambda x: self.show_image(x, self.webcam))
         self.det_thread.send_log.connect(lambda x: self.show_log(x, self.terminal))
+        self.det_thread.finished.connect(self.finish)
         self.btn_save_path.clicked.connect(self.browse_savepath)
         self.btn_model_path.clicked.connect(self.browse_modelpath)
         self.btn_start.clicked.connect(self.start_detect)
         self.btn_stop.clicked.connect(self.stop_detect)
         self.btn_exit.clicked.connect(self.exit_app)
+        self.btn_stop.setShortcut(QKeySequence('q'))
 
     @staticmethod
     def show_log(log, terminal):
@@ -438,17 +465,18 @@ class MyWindow(QMainWindow):
             ih, iw, _ = img_src.shape
             w = label.geometry().width()
             h = label.geometry().height()
-            if iw > ih:
-                scal = w / iw
-                nw = w
-                nh = int(scal * ih)
-                img_src_ = cv2.resize(img_src, (nw, nh))
+            img_src_ = cv2.resize(img_src, (w, h))
+            # if iw > ih:
+            #     scal = w / iw
+            #     nw = w
+            #     nh = int(scal * ih)
+            #     img_src_ = cv2.resize(img_src, (nw, nh))
 
-            else:
-                scal = h / ih
-                nw = int(scal * iw)
-                nh = h
-                img_src_ = cv2.resize(img_src, (nw, nh))
+            # else:
+            #     scal = h / ih
+            #     nw = int(scal * iw)
+            #     nh = h
+            #     img_src_ = cv2.resize(img_src, (nw, nh))
 
             frame = cv2.cvtColor(img_src_, cv2.COLOR_BGR2RGB)
             img = QImage(frame.data, frame.shape[1], frame.shape[0], frame.shape[2] * frame.shape[1],
@@ -473,12 +501,15 @@ class MyWindow(QMainWindow):
         self.det_thread.name = datetime.now().strftime("%d-%m-%Y-%H-%M")
         self.det_thread.start()
     
+    def finish(self):
+        self.webcam.clear()
+    
     def stop_detect(self):
         self.det_thread.quit()
         if hasattr(self.det_thread, 'vid_cap'):
                 if self.det_thread.vid_cap:
                     self.det_thread.vid_cap.release()
-            
+        
     
     def exit_app(self):
         self.det_thread.quit()
