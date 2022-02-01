@@ -28,7 +28,7 @@ import argparse
 import os
 import sys
 from pathlib import Path
-
+from datetime import datetime
 import numpy as np
 import cv2
 import torch
@@ -39,6 +39,8 @@ ROOT = FILE.parents[0]  # YOLOv5 root directory
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
+
+DELAY = 10
 
 from models.common import DetectMultiBackend
 from utils.datasets import IMG_FORMATS, VID_FORMATS, LoadImages, LoadStreams
@@ -88,7 +90,6 @@ def run(weights=ROOT / 'best.pt',  # model.pt path(s)
         half=False,  # use FP16 half-precision inference
         dnn=False,  # use OpenCV DNN for ONNX inference
         ):
-    print(data)
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     is_file = Path(source).suffix[1:] in (IMG_FORMATS + VID_FORMATS)
@@ -106,7 +107,7 @@ def run(weights=ROOT / 'best.pt',  # model.pt path(s)
     model = DetectMultiBackend(weights, device=device, dnn=dnn, data=data)
     stride, names, pt, jit, onnx, engine = model.stride, model.names, model.pt, model.jit, model.onnx, model.engine
     imgsz = check_img_size(imgsz, s=stride)  # check image size
-
+    
     # Half
     half &= (pt or jit or engine) and device.type != 'cpu'  # half precision only supported by PyTorch on CUDA
     if pt or jit:
@@ -126,7 +127,10 @@ def run(weights=ROOT / 'best.pt',  # model.pt path(s)
     # Run inference
     model.warmup(imgsz=(1, 3, *imgsz), half=half)  # warmup
     dt, seen = [0.0, 0.0, 0.0], 0
+    delay_pass_label = "No Pass"
+    delay_number = 0
     for path, im, im0s, vid_cap, s in dataset:
+        pass_label = "No Pass"
         t1 = time_sync()
         im = torch.from_numpy(im).to(device)
         im = im.half() if half else im.float()  # uint8 to fp16/32
@@ -146,7 +150,6 @@ def run(weights=ROOT / 'best.pt',  # model.pt path(s)
         pred = non_max_suppression(pred, conf_thres, iou_thres, classes, agnostic_nms, max_det=max_det)
         dt[2] += time_sync() - t3
         
-        
         # Process predictions
         for i, det in enumerate(pred):  # per image
             seen += 1
@@ -161,7 +164,7 @@ def run(weights=ROOT / 'best.pt',  # model.pt path(s)
             txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # im.txt
             s += '%gx%g ' % im.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
-            imc = im0.copy() if save_crop else im0  # for save_crop
+            imc = im0.copy()
             annotator = Annotator(im0, line_width=line_thickness, example=str(names))
             # detected object list
             det_list = []
@@ -210,7 +213,7 @@ def run(weights=ROOT / 'best.pt',  # model.pt path(s)
             # 3. find the helmet
             #    , and center of helmet is over person
             
-            pass_label = "No Pass"
+            
             
             # find motorcycle/bicycle and merge them into one list
             vehicles = find_item_by_label(det_list, "motorcycle")
@@ -245,8 +248,22 @@ def run(weights=ROOT / 'best.pt',  # model.pt path(s)
                 pass_label = "Pass"
             if len(intersect_persons) == 0 and len(over_helmets) == 0:
                 pass_label = "No Detection"
+            delay_pass_label = pass_label
             # Print time (inference-only)
             LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
+            if delay_number >= DELAY and delay_pass_label == "No Pass":
+                save_file = datetime.now().strftime("%d-%m-%Y-%H-%M-%S") + ".png"
+                save_file_path = str(save_dir / save_file)
+                cv2.imwrite(save_file_path, imc)
+                
+            if delay_pass_label != "No Pass":
+                delay_number = 0
+            if delay_number >= DELAY:
+                delay_number = 0
+            else:
+                delay_number += 1
+
+                
             
             cv2.rectangle(im0, (0, 0), (230, 130), (0, 0, 0), -1)
             cv2.putText(im0, str(len(intersect_persons)) + " person", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)

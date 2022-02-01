@@ -19,6 +19,7 @@ ROOT = FILE.parents[0]  # YOLOv5 root directory
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
+DELAY = 10
 
 from models.common import DetectMultiBackend
 from utils.datasets import IMG_FORMATS, VID_FORMATS, LoadImages, LoadStreams
@@ -122,6 +123,8 @@ class DetThread(QThread):
         
         # for path, im, im0s, self.vid_cap, s in self.dataset:
         mode = "video"
+        delay_pass_label = "No Pass"
+        delay_number = 0
         while(self.vid_cap.isOpened()):
             
             s = ''
@@ -180,7 +183,7 @@ class DetThread(QThread):
                 # txt_path = str(save_dir / 'labels' / p.stem) + ('' if self.dataset.mode == 'image' else f'_{frame}')  # im.txt
                 s += '%gx%g ' % im.shape[2:]  # print string
                 gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
-                imc = im0.copy() if save_crop else im0  # for save_crop
+                imc = im0.copy()
                 annotator = Annotator(im0, line_width=line_thickness, example=str(names))
                 # detected object list
                 det_list = []
@@ -229,7 +232,7 @@ class DetThread(QThread):
                 # 3. find the helmet
                 #    , and center of helmet is over person
                 
-                pass_label = "Not Pass"
+                pass_label = "No Pass"
                 
                 # find motorcycle/bicycle and merge them into one list
                 vehicles = find_item_by_label(det_list, "motorcycle")
@@ -266,7 +269,16 @@ class DetThread(QThread):
                     pass_label = "No Detection"
                 # Print time (inference-only)
                 LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
-
+                if delay_number >= DELAY and delay_pass_label == "No Pass":
+                    save_file = datetime.now().strftime("%d-%m-%Y-%H-%M-%S") + ".png"
+                    save_file_path = str(save_dir / save_file)
+                    cv2.imwrite(save_file_path, imc)
+                if delay_pass_label != "No Pass":
+                    delay_number = 0
+                if delay_number >= DELAY:
+                    delay_number = 0
+                else:
+                    delay_number += 1
                 
                 cv2.rectangle(im0, (0, 0), (230, 130), (0, 0, 0), -1)
                 cv2.putText(im0, str(len(intersect_persons)) + " person", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
