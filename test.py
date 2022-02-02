@@ -1,5 +1,7 @@
-vehicles = [['motorcycle', (694, 393), [505, 307, 883, 479]]]
-bicycles = [['bicycle', (694, 393), [505, 307, 883, 479]]]
-vehicles.extend(bicycles)
+from math import ceil
 
-print(vehicles)
+
+import math
+l = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+l[::2] = ["A"] * math.ceil(len(l)/2)
+print(l)

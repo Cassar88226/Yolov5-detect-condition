@@ -267,11 +267,12 @@ class DetThread(QThread):
                     pass_label = "Pass"
                 if len(intersect_persons) == 0 and len(over_helmets) == 0:
                     pass_label = "No Detection"
+                delay_pass_label = pass_label
                 # Print time (inference-only)
                 LOGGER.info(f'{s}Done. ({t3 - t2:.3f}s)')
                 if delay_number >= DELAY and delay_pass_label == "No Pass":
                     save_file = datetime.now().strftime("%d-%m-%Y-%H-%M-%S") + ".png"
-                    save_file_path = str(save_dir / save_file)
+                    save_file_path = os.path.join(save_dir, save_file)
                     cv2.imwrite(save_file_path, imc)
                 if delay_pass_label != "No Pass":
                     delay_number = 0
