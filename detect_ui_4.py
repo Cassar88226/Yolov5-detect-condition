@@ -2,7 +2,7 @@ from PyQt5 import QtCore, QtGui
 from PyQt5.QtCore import pyqtSignal, QThread
 from PyQt5.QtGui import QImage, QPixmap, QKeySequence
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QPlainTextEdit, QLineEdit, QPushButton, QFileDialog
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QPlainTextEdit, QLineEdit, QPushButton, QFileDialog, QSpinBox
 import os
 import sys
 from pathlib import Path
@@ -51,6 +51,8 @@ class DetThread(QThread):
         self.data = './data/custom_data.yaml'
         self.project = ROOT / 'videos'
         self.name = datetime.now().strftime("%d-%m-%Y-%H-%M")
+        self.video_length = 5
+        self.fps = 30
     @torch.no_grad()
     def run(self, 
             imgsz=(640, 640),  # inference size (height, width)
@@ -125,6 +127,9 @@ class DetThread(QThread):
         mode = "video"
         delay_pass_label = "No Pass"
         delay_number = 0
+        frame_cnt = 0
+        path_no = 0
+
         while(self.vid_cap.isOpened()):
             
             s = ''
@@ -178,7 +183,16 @@ class DetThread(QThread):
                     p, im0, frame = path, im0s.copy(), 0
 
                 p = Path(p)  # to Path
-                save_path = os.path.join(save_dir, p.name) # str(save_dir / p.name)  # im.jpg
+                if path_no == 0:
+                    save_path = os.path.join(save_dir, p.name) # str(save_dir / p.name)  # im.jpg
+                frame_cnt += 1
+                if frame_cnt > self.fps * self.video_length * 60:
+                    frame_cnt = 0
+                    path_no += 1
+                    file_name = p.stem + "_" + str(path_no) + p.suffix
+                    save_path = os.path.join(save_dir, file_name)
+                
+                
                 txt_path =  os.path.join(save_dir, 'labels', p.stem) if mode == 'image' else f'_{frame}'
                 # txt_path = str(save_dir / 'labels' / p.stem) + ('' if self.dataset.mode == 'image' else f'_{frame}')  # im.txt
                 s += '%gx%g ' % im.shape[2:]  # print string
@@ -302,12 +316,7 @@ class DetThread(QThread):
                             vid_path[i] = save_path
                             if isinstance(vid_writer[i], cv2.VideoWriter):
                                 vid_writer[i].release()  # release previous video writer
-                            # if self.vid_cap:  # video
-                            #     fps = self.vid_cap.get(cv2.CAP_PROP_FPS)
-                            #     w = int(self.vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                            #     h = int(self.vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                            # else:  # stream
-                            fps, w, h = 30, im0.shape[1], im0.shape[0]
+                            fps, w, h = self.fps, im0.shape[1], im0.shape[0]
                             save_path += '.mp4'
                             vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                         vid_writer[i].write(im0)
@@ -468,6 +477,29 @@ class MyWindow(QMainWindow):
         self.save_model_label.setStyleSheet("color: rgb(255, 255, 255);")
         self.save_model_label.setAlignment(QtCore.Qt.AlignCenter)
         self.save_model_label.setObjectName("save_model_label")
+        self.video_len = QSpinBox(self.centralwidget)
+        self.video_len.setGeometry(QtCore.QRect(830, 190, 41, 22))
+        self.video_len.setStyleSheet("background-color: rgb(255, 255, 255);\n"
+                                     "border: 3px solid black;")
+        self.video_len.setMinimum(1)
+        self.video_len.setValue(5)
+        self.video_len.setObjectName("video_len")
+        self.label_3 = QLabel(self.centralwidget)
+        self.label_3.setGeometry(QtCore.QRect(630, 190, 191, 21))
+        font = QtGui.QFont()
+        font.setPointSize(14)
+        self.label_3.setFont(font)
+        self.label_3.setStyleSheet("color: rgb(255, 255, 255);")
+        self.label_3.setAlignment(QtCore.Qt.AlignCenter)
+        self.label_3.setObjectName("label_3")
+        self.label_4 = QLabel(self.centralwidget)
+        self.label_4.setGeometry(QtCore.QRect(880, 190, 71, 21))
+        font = QtGui.QFont()
+        font.setPointSize(14)
+        self.label_4.setFont(font)
+        self.label_4.setStyleSheet("color: rgb(255, 255, 255);")
+        self.label_4.setAlignment(QtCore.Qt.AlignCenter)
+        self.label_4.setObjectName("label_4")        
         self.setCentralWidget(self.centralwidget)
         self.terminal.setMaximumBlockCount(100)
 
@@ -475,9 +507,9 @@ class MyWindow(QMainWindow):
         self.connect_signal_slots()
         
     def connect_signal_slots(self):
-        
         self.det_thread = DetThread()
         self.det_thread.source = '0'
+        self.det_thread.video_length = 5
         self.det_thread.send_img.connect(lambda x: self.show_image(x, self.webcam))
         self.det_thread.send_log.connect(lambda x: self.show_log(x, self.terminal))
         self.det_thread.finished.connect(self.finish)
@@ -486,6 +518,7 @@ class MyWindow(QMainWindow):
         self.btn_start.clicked.connect(self.start_detect)
         self.btn_stop.clicked.connect(self.stop_detect)
         self.btn_exit.clicked.connect(self.exit_app)
+        # self.video_len.valueChanged.connect(self.videl_len_change)
         self.btn_stop.setShortcut(QKeySequence('q'))
 
     @staticmethod
@@ -522,6 +555,9 @@ class MyWindow(QMainWindow):
         except Exception as e:
             print(repr(e))
 
+    # def videl_len_change(self):
+    #     self.det_thread.video_length = self.video_len.value()
+
     def browse_savepath(self):
         dirName = QFileDialog.getExistingDirectory(self, "Select Path for saving the Result")
         self.save_path.setText(dirName)
@@ -534,6 +570,7 @@ class MyWindow(QMainWindow):
     def start_detect(self):
         self.det_thread.project = self.save_path.text()
         self.det_thread.weights = self.model_path.text() if self.model_path.text() else "best.pt"
+        self.det_thread.video_length = self.video_len.value()
         self.det_thread.name = datetime.now().strftime("%d-%m-%Y-%H-%M")
         self.det_thread.start()
     
@@ -571,6 +608,8 @@ class MyWindow(QMainWindow):
         self.btn_stop.setText(_translate("MainWindow", "STOP\n"
             "DETECTION"))
         self.btn_exit.setText(_translate("MainWindow", "EXIT"))
+        self.label_3.setText(_translate("MainWindow", "Video Length to save:"))
+        self.label_4.setText(_translate("MainWindow", "Minutes"))
 
 
 if __name__ == "__main__":

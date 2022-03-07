@@ -41,6 +41,10 @@ if str(ROOT) not in sys.path:
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 DELAY = 10
+FPS = 30
+VID_LEN = 0.1
+INTERVAL = VID_LEN * 60 * FPS
+
 
 from models.common import DetectMultiBackend
 from utils.datasets import IMG_FORMATS, VID_FORMATS, LoadImages, LoadStreams
@@ -90,6 +94,7 @@ def run(weights=ROOT / 'best.pt',  # model.pt path(s)
         half=False,  # use FP16 half-precision inference
         dnn=False,  # use OpenCV DNN for ONNX inference
         ):
+    global INTERVAL
     source = str(source)
     save_img = not nosave and not source.endswith('.txt')  # save inference images
     is_file = Path(source).suffix[1:] in (IMG_FORMATS + VID_FORMATS)
@@ -129,6 +134,8 @@ def run(weights=ROOT / 'best.pt',  # model.pt path(s)
     dt, seen = [0.0, 0.0, 0.0], 0
     delay_pass_label = "No Pass"
     delay_number = 0
+    frame_cnt = 0
+    path_no = 0
     for path, im, im0s, vid_cap, s in dataset:
         pass_label = "No Pass"
         t1 = time_sync()
@@ -159,8 +166,16 @@ def run(weights=ROOT / 'best.pt',  # model.pt path(s)
             else:
                 p, im0, frame = path, im0s.copy(), getattr(dataset, 'frame', 0)
 
-            p = Path(p)  # to Path
-            save_path = str(save_dir / p.name)  # im.jpg
+            p = Path(p)  # to Path            
+            if path_no == 0:
+                save_path = str(save_dir / p.name)  # im.jpg
+            frame_cnt += 1
+            if frame_cnt > INTERVAL:
+                frame_cnt = 0
+                path_no += 1
+                file_name = p.stem + "_" + str(path_no) + p.suffix
+                save_path = str(save_dir / file_name)
+                    
             txt_path = str(save_dir / 'labels' / p.stem) + ('' if dataset.mode == 'image' else f'_{frame}')  # im.txt
             s += '%gx%g ' % im.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
@@ -288,6 +303,8 @@ def run(weights=ROOT / 'best.pt',  # model.pt path(s)
                             fps = vid_cap.get(cv2.CAP_PROP_FPS)
                             w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                             h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                            if INTERVAL != VID_LEN * 60 * fps:
+                                INTERVAL = VID_LEN * 60 * fps
                         else:  # stream
                             fps, w, h = 30, im0.shape[1], im0.shape[0]
                             save_path += '.mp4'
