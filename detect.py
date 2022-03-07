@@ -42,7 +42,7 @@ ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
 DELAY = 10
 FPS = 30
-VID_LEN = 0.1
+VID_LEN = 5
 INTERVAL = VID_LEN * 60 * FPS
 
 
@@ -307,7 +307,8 @@ def run(weights=ROOT / 'best.pt',  # model.pt path(s)
                                 INTERVAL = VID_LEN * 60 * fps
                         else:  # stream
                             fps, w, h = 30, im0.shape[1], im0.shape[0]
-                            save_path += '.mp4'
+                            if not save_path.endswith(".mp4"):
+                                save_path += '.mp4'
                         vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                     vid_writer[i].write(im0)
     # Print results

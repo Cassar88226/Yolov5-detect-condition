@@ -1,6 +1,6 @@
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtCore import pyqtSignal, QThread
-from PyQt5.QtGui import QImage, QPixmap, QKeySequence
+from PyQt5.QtGui import QImage, QPixmap, QKeySequence, QIntValidator
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QPlainTextEdit, QLineEdit, QPushButton, QFileDialog, QSpinBox
 import os
@@ -317,7 +317,8 @@ class DetThread(QThread):
                             if isinstance(vid_writer[i], cv2.VideoWriter):
                                 vid_writer[i].release()  # release previous video writer
                             fps, w, h = self.fps, im0.shape[1], im0.shape[0]
-                            save_path += '.mp4'
+                            if not save_path.endswith(".mp4"):
+                                save_path += '.mp4'
                             vid_writer[i] = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                         vid_writer[i].write(im0)
                 self.send_img.emit(im0)
@@ -477,13 +478,16 @@ class MyWindow(QMainWindow):
         self.save_model_label.setStyleSheet("color: rgb(255, 255, 255);")
         self.save_model_label.setAlignment(QtCore.Qt.AlignCenter)
         self.save_model_label.setObjectName("save_model_label")
-        self.video_len = QSpinBox(self.centralwidget)
-        self.video_len.setGeometry(QtCore.QRect(830, 190, 41, 22))
+        
+        self.video_len = QLineEdit(self.centralwidget)
+        self.video_len.setGeometry(QtCore.QRect(830, 190, 51, 23))
         self.video_len.setStyleSheet("background-color: rgb(255, 255, 255);\n"
                                      "border: 3px solid black;")
-        self.video_len.setMinimum(1)
-        self.video_len.setValue(5)
         self.video_len.setObjectName("video_len")
+        self.video_len.setText("5")
+        self.video_len.setAlignment(QtCore.Qt.AlignRight|QtCore.Qt.AlignTrailing|QtCore.Qt.AlignVCenter)
+        validator = QIntValidator(1, 99, self)
+        self.video_len.setValidator(validator)
         self.label_3 = QLabel(self.centralwidget)
         self.label_3.setGeometry(QtCore.QRect(630, 190, 191, 21))
         font = QtGui.QFont()
@@ -570,7 +574,12 @@ class MyWindow(QMainWindow):
     def start_detect(self):
         self.det_thread.project = self.save_path.text()
         self.det_thread.weights = self.model_path.text() if self.model_path.text() else "best.pt"
-        self.det_thread.video_length = self.video_len.value()
+        try:
+            self.det_thread.video_length = int(self.video_len.text())
+        except:
+            self.det_thread.video_length = 5
+        print(self.det_thread.video_length)
+        
         self.det_thread.name = datetime.now().strftime("%d-%m-%Y-%H-%M")
         self.det_thread.start()
     
